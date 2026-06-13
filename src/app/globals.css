@@ -35,7 +35,7 @@ body {
 
 /* Scroll track for the animation */
 .scroll-container {
-  height: 6100vh; 
+  height: 12000vh; /* Doubled from 6100vh to map the frames over a much longer physical distance, making it incredibly slow */
   width: 100vw;
   position: relative;
 }

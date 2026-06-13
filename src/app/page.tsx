@@ -2,21 +2,26 @@
 
 import Image from "next/image";
 import { useEffect, useRef } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 
-gsap.registerPlugin(ScrollTrigger);
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+}
 
 export default function Home() {
   const preloaderRef = useRef<HTMLDivElement>(null);
   const preloaderBarRef = useRef<HTMLDivElement>(null);
   const bgTealRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   
   const firstSectionRef = useRef<HTMLDivElement>(null);
+  const hasClickedPlayRef = useRef<boolean>(false);
+  const playToastRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
-  const counterRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
   const whyFlorianRef = useRef<HTMLDivElement>(null);
   const benefitsRef = useRef<HTMLDivElement>(null);
@@ -31,7 +36,6 @@ export default function Home() {
   const atCellularRecoveryRef = useRef<HTMLDivElement>(null);
   const glassCardsContainerRef = useRef<HTMLDivElement>(null);
   
-  // Progress Section Refs
   const progressSectionRef = useRef<HTMLDivElement>(null);
   const progressCanvasRef = useRef<HTMLCanvasElement>(null);
   const progressTitleRef = useRef<HTMLDivElement>(null);
@@ -46,12 +50,10 @@ export default function Home() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // --- CUSTOM PRELOADER LOGIC ---
     let totalLoadedImages = 0;
-    const totalRequiredImages = 450; // 300 (seq 1) + 150 (seq 2)
+    const totalRequiredImages = 450;
     let minimumTimeElapsed = false;
 
-    // Lock scrolling immediately on mount
     document.body.style.overflow = 'hidden';
 
     const checkPreloaderComplete = () => {
@@ -64,7 +66,6 @@ export default function Home() {
             if (preloaderRef.current) {
               preloaderRef.current.style.display = 'none';
             }
-            // Unlock scrolling
             document.body.style.overflow = 'auto';
           }
         });
@@ -83,33 +84,21 @@ export default function Home() {
       }
       checkPreloaderComplete();
     };
-    // -----------------------------
 
     const frameCount = 300;
-    const currentFrame = (index: number) => (
-      `/assets/img-sequence-png/${(index + 1).toString().padStart(4, '0')}_result.png`
-    );
-
+    const currentFrame = (index: number) => (`/assets/img-sequence-png/${(index + 1).toString().padStart(4, '0')}_result.png`);
     const images: HTMLImageElement[] = [];
-
-    // To prevent unnecessary redraws
     let currentImageIndex = -1;
-    let ticking = false;
 
-    // Load all images
     for (let i = 0; i < frameCount; i++) {
       const img = new window.Image();
       img.src = currentFrame(i);
       images.push(img);
-      
       img.onload = () => {
         incrementPreloader();
-        
-        // Setup initial canvas dimensions and draw the first frame when it loads
         if (i === 0) {
           canvas.width = img.naturalWidth;
           canvas.height = img.naturalHeight;
-          
           if (currentImageIndex === -1) {
             currentImageIndex = 0;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -119,33 +108,19 @@ export default function Home() {
       };
     }
 
-    // Function to draw frames optimized for 60fps without GPU bottlenecking
     const updateImage = (fractionalIndex: number) => {
       const index = Math.round(fractionalIndex);
-
-      if (index === currentImageIndex || !images[index] || !images[index].complete || images[index].naturalHeight === 0) {
-        return;
-      }
-      
+      if (index === currentImageIndex || !images[index] || !images[index].complete || images[index].naturalHeight === 0) return;
       currentImageIndex = index;
-      
-      // Clear and draw highly optimized (no alpha blending to prevent memory thrashing)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(images[index], 0, 0, canvas.width, canvas.height);
     };
 
-    // --- SECOND IMAGE SEQUENCE ---
     const progressCanvas = progressCanvasRef.current;
     let progressCtx: CanvasRenderingContext2D | null = null;
-    if (progressCanvas) {
-      progressCtx = progressCanvas.getContext('2d', { alpha: false });
-    }
-
+    if (progressCanvas) progressCtx = progressCanvas.getContext('2d', { alpha: false });
     const progressFrameCount = 150;
-    const progressFrame = (index: number) => (
-      `/assets/folder-2-sequence/${(index + 1).toString().padStart(4, '0')}_result.webp`
-    );
-
+    const progressFrame = (index: number) => (`/assets/folder-2-sequence/${(index + 1).toString().padStart(4, '0')}_result.webp`);
     const progressImages: HTMLImageElement[] = [];
     let currentProgressIndex = -1;
 
@@ -153,7 +128,6 @@ export default function Home() {
       const img = new window.Image();
       img.src = progressFrame(i);
       progressImages.push(img);
-      
       img.onload = () => {
         incrementPreloader();
         if (i === 0 && progressCanvas && progressCtx) {
@@ -170,360 +144,160 @@ export default function Home() {
     const updateProgressImage = (fractionalIndex: number) => {
       if (!progressCanvas || !progressCtx) return;
       const index = Math.round(fractionalIndex);
-
-      if (index === currentProgressIndex || !progressImages[index] || !progressImages[index].complete || progressImages[index].naturalHeight === 0) {
-        return;
-      }
-      
+      if (index === currentProgressIndex || !progressImages[index] || !progressImages[index].complete || progressImages[index].naturalHeight === 0) return;
       currentProgressIndex = index;
       progressCtx.drawImage(progressImages[index], 0, 0, progressCanvas.width, progressCanvas.height);
     };
-    // -----------------------------
 
-
-    // Use GSAP ScrollTrigger for ultra-smooth scrubbing
     const st = ScrollTrigger.create({
-      trigger: document.documentElement, // The entire document is the scroll area
+      id: "mainTrigger",
+      trigger: document.documentElement, // Use the entire document height for maximum scroll range
       start: "top top",
       end: "bottom bottom",
-      scrub: 1.5, // 1.5 seconds of smoothing to make it feel buttery
+      scrub: 1.5, // Restored 1.5 seconds of smoothing for buttery slow transitions
       onUpdate: (self) => {
-        const scrollFraction = self.progress;
-        
-        // Calculate the exact float index based on an extended virtual timeline
-        const virtualFrameCount = 610;
-        const rawFrame = scrollFraction * virtualFrameCount;
-        
-        let continuousFrame = rawFrame;
-        // Non-linear mapping: compress the 420-490 continuous timeline segment into just 30 scroll frames (420-450)
-        // This makes the cinematic transition play 2.33x faster relative to scroll distance
-        if (rawFrame > 420 && rawFrame <= 450) {
-          continuousFrame = 420 + (rawFrame - 420) * (70 / 30);
-        } else if (rawFrame > 450) {
-          continuousFrame = rawFrame + 40; // Maintain the 40-frame offset for the rest of the timeline
+        let continuousFrame = self.progress * 750;
+
+        if (!hasClickedPlayRef.current && continuousFrame > 125) {
+          const targetScrollY = self.start + (125 / 750) * (self.end - self.start);
+          if (window.scrollY > targetScrollY) {
+            window.scrollTo(0, targetScrollY);
+            continuousFrame = 125;
+            if (playToastRef.current) {
+              playToastRef.current.style.opacity = '1';
+              playToastRef.current.style.transform = 'translate(20px, -50%)';
+            }
+          }
+        } else {
+          if (playToastRef.current) {
+            if (hasClickedPlayRef.current || continuousFrame < 120) {
+              playToastRef.current.style.opacity = '0';
+              playToastRef.current.style.transform = 'translate(0px, -50%)';
+            }
+          }
+        }
+
+        let mappedFrame = continuousFrame;
+        if (continuousFrame > 420 && continuousFrame <= 450) {
+          mappedFrame = 420 + (continuousFrame - 420) * (70 / 30);
+        } else if (continuousFrame > 450) {
+          mappedFrame = continuousFrame + 40;
         }
         
-        // Cap the canvas rendering at the last available image
-        const exactFrameIndex = Math.min(continuousFrame, frameCount - 1);
+        const exactFrameIndex = Math.min(mappedFrame, frameCount - 1);
         updateImage(exactFrameIndex);
         
-        if (textRef.current) {
-          let opacity = 1;
-          if (continuousFrame > 17 && continuousFrame < 24) {
-            opacity = 1 - ((continuousFrame - 17) / 7);
-          } else if (continuousFrame >= 24) {
-            opacity = 0;
-          }
-          textRef.current.style.opacity = opacity.toString();
-        }
-
+        if (textRef.current) textRef.current.style.opacity = (mappedFrame > 17 && mappedFrame < 24) ? (1 - ((mappedFrame - 17) / 7)).toString() : (mappedFrame >= 24 ? "0" : "1");
         if (featuresRef.current) {
-          let fOpacity = 0;
-          if (continuousFrame >= 49 && continuousFrame <= 54) {
-            fOpacity = (continuousFrame - 49) / 5;
-          } else if (continuousFrame > 54 && continuousFrame < 71) {
-            fOpacity = 1;
-          } else if (continuousFrame >= 71 && continuousFrame <= 75) {
-            fOpacity = 1 - ((continuousFrame - 71) / 4);
-          }
-          featuresRef.current.style.opacity = fOpacity.toString();
+            let fOpacity = 0;
+            if (mappedFrame >= 49 && mappedFrame <= 54) fOpacity = (mappedFrame - 49) / 5;
+            else if (mappedFrame > 54 && mappedFrame < 71) fOpacity = 1;
+            else if (mappedFrame >= 71 && mappedFrame <= 75) fOpacity = 1 - ((mappedFrame - 71) / 4);
+            featuresRef.current.style.opacity = fOpacity.toString();
         }
-
         if (whyFlorianRef.current) {
-          let wfOpacity = 0;
-          if (continuousFrame >= 78 && continuousFrame <= 83) {
-            wfOpacity = (continuousFrame - 78) / 5;
-          } else if (continuousFrame > 83 && continuousFrame < 95) {
-            wfOpacity = 1;
-          } else if (continuousFrame >= 95 && continuousFrame <= 99) {
-            wfOpacity = 1 - ((continuousFrame - 95) / 4);
-          }
-          whyFlorianRef.current.style.opacity = wfOpacity.toString();
+            let wfOpacity = 0;
+            if (mappedFrame >= 78 && mappedFrame <= 83) wfOpacity = (mappedFrame - 78) / 5;
+            else if (mappedFrame > 83 && mappedFrame < 95) wfOpacity = 1;
+            else if (mappedFrame >= 95 && mappedFrame <= 99) wfOpacity = 1 - ((mappedFrame - 95) / 4);
+            whyFlorianRef.current.style.opacity = wfOpacity.toString();
         }
-
         if (benefitsRef.current) {
-          let bOpacity = 0;
-          let bTranslateY = 50;
-          if (continuousFrame >= 106 && continuousFrame <= 111) {
-            bOpacity = (continuousFrame - 106) / 5;
-            bTranslateY = 50 * (1 - bOpacity); // Slide up on entry
-          } else if (continuousFrame > 111 && continuousFrame < 125) {
-            bOpacity = 1;
-            bTranslateY = 0;
-          } else if (continuousFrame >= 125 && continuousFrame <= 132) {
-            bOpacity = 1 - ((continuousFrame - 125) / 7);
-            bTranslateY = -50 * (1 - bOpacity); // Slide up on exit (parallax)
-          }
-          benefitsRef.current.style.opacity = bOpacity.toString();
-          benefitsRef.current.style.transform = `translateY(${bTranslateY}px)`;
+            let bOpacity = 0, bTranslateY = 50;
+            if (mappedFrame >= 106 && mappedFrame <= 111) { bOpacity = (mappedFrame - 106) / 5; bTranslateY = 50 * (1 - bOpacity); }
+            else if (mappedFrame > 111 && mappedFrame < 125) { bOpacity = 1; bTranslateY = 0; }
+            else if (mappedFrame >= 125 && mappedFrame <= 132) { bOpacity = 1 - ((mappedFrame - 125) / 7); bTranslateY = -50 * (1 - bOpacity); }
+            benefitsRef.current.style.opacity = bOpacity.toString();
+            benefitsRef.current.style.transform = `translateY(${bTranslateY}px)`;
         }
-
         if (numberedFeaturesRef.current) {
-          let nfOpacity = 0;
-          let nfTranslateY = 50;
-          if (continuousFrame >= 142 && continuousFrame <= 148) {
-            nfOpacity = (continuousFrame - 142) / 6;
-            nfTranslateY = 50 * (1 - nfOpacity); // Slide up on entry
-          } else if (continuousFrame > 148 && continuousFrame < 198) {
-            nfOpacity = 1;
-            nfTranslateY = 0;
-          } else if (continuousFrame >= 198 && continuousFrame <= 208) {
-            nfOpacity = 1 - ((continuousFrame - 198) / 10);
-            nfTranslateY = -50 * (1 - nfOpacity); // Slide up on exit
-          }
+          let nfOpacity = 0, nfTranslateY = 50;
+          if (mappedFrame >= 142 && mappedFrame <= 148) { nfOpacity = (mappedFrame - 142) / 6; nfTranslateY = 50 * (1 - nfOpacity); }
+          else if (mappedFrame > 148 && mappedFrame < 198) { nfOpacity = 1; nfTranslateY = 0; }
+          else if (mappedFrame >= 198 && mappedFrame <= 208) { nfOpacity = 1 - ((mappedFrame - 198) / 10); nfTranslateY = -50 * (1 - nfOpacity); }
           numberedFeaturesRef.current.style.opacity = nfOpacity.toString();
           numberedFeaturesRef.current.style.transform = `translateY(${nfTranslateY}px)`;
         }
-
         if (hairDoesNotRef.current) {
-          let hOpacity = 0;
-          let hDistort = 1;
-          if (continuousFrame >= 232 && continuousFrame <= 235) { // Fade in
-            hOpacity = (continuousFrame - 232) / 3;
-            hDistort = 1 - hOpacity;
-          } else if (continuousFrame > 235 && continuousFrame < 245) { // Show
-            hOpacity = 1;
-            hDistort = 0;
-          } else if (continuousFrame >= 245 && continuousFrame <= 247) { // Fade out
-            hOpacity = 1 - ((continuousFrame - 245) / 2);
-            hDistort = 1 - hOpacity;
-          }
+          let hOpacity = 0, hDistort = 1;
+          if (mappedFrame >= 232 && mappedFrame <= 235) { hOpacity = (mappedFrame - 232) / 3; hDistort = 1 - hOpacity; }
+          else if (mappedFrame > 235 && mappedFrame < 245) { hOpacity = 1; hDistort = 0; }
+          else if (mappedFrame >= 245 && mappedFrame <= 247) { hOpacity = 1 - ((mappedFrame - 245) / 2); hDistort = 1 - hOpacity; }
           hairDoesNotRef.current.style.opacity = hOpacity.toString();
           hairDoesNotRef.current.style.filter = `blur(${hDistort * 15}px)`;
           hairDoesNotRef.current.style.transform = `scale(${1 + (hDistort * 0.2)})`;
         }
-
         if (atTheStrandRef.current) {
-          let aOpacity = 0;
-          let aDistort = 1;
-          if (continuousFrame >= 248 && continuousFrame <= 249) {
-            aOpacity = (continuousFrame - 248) / 1;
-            aDistort = 1 - aOpacity;
-          } else if (continuousFrame > 249 && continuousFrame < 267) {
-            aOpacity = 1;
-            aDistort = 0;
-          } else if (continuousFrame >= 267 && continuousFrame <= 269) {
-            aOpacity = 1 - ((continuousFrame - 267) / 2);
-            aDistort = 1 - aOpacity;
-          }
+          let aOpacity = 0, aDistort = 1;
+          if (mappedFrame >= 248 && mappedFrame <= 249) { aOpacity = (mappedFrame - 248) / 1; aDistort = 1 - aOpacity; }
+          else if (mappedFrame > 249 && mappedFrame < 267) { aOpacity = 1; aDistort = 0; }
+          else if (mappedFrame >= 267 && mappedFrame <= 269) { aOpacity = 1 - ((mappedFrame - 267) / 2); aDistort = 1 - aOpacity; }
           atTheStrandRef.current.style.opacity = aOpacity.toString();
           atTheStrandRef.current.style.filter = `blur(${aDistort * 15}px)`;
           atTheStrandRef.current.style.transform = `scale(${1 + (aDistort * 0.2)})`;
         }
-
         if (itBeginsRef.current) {
-          let iOpacity = 0;
-          let iDistort = 1;
-          if (continuousFrame >= 269.5 && continuousFrame <= 270) {
-            iOpacity = (continuousFrame - 269.5) / 0.5;
-            iDistort = 1 - iOpacity;
-          } else if (continuousFrame > 270 && continuousFrame < 290) {
-            iOpacity = 1;
-            iDistort = 0;
-          } else if (continuousFrame >= 290 && continuousFrame <= 295) {
-            iOpacity = 1 - ((continuousFrame - 290) / 5);
-            iDistort = 1 - iOpacity;
-          }
+          let iOpacity = 0, iDistort = 1;
+          if (mappedFrame >= 269.5 && mappedFrame <= 270) { iOpacity = (mappedFrame - 269.5) / 0.5; iDistort = 1 - iOpacity; }
+          else if (mappedFrame > 270 && mappedFrame < 290) { iOpacity = 1; iDistort = 0; }
+          else if (mappedFrame >= 290 && mappedFrame <= 295) { iOpacity = 1 - ((mappedFrame - 290) / 5); iDistort = 1 - iOpacity; }
           itBeginsRef.current.style.opacity = iOpacity.toString();
           itBeginsRef.current.style.filter = `blur(${iDistort * 15}px)`;
           itBeginsRef.current.style.transform = `scale(${1 + (iDistort * 0.2)})`;
         }
-
         if (beneathSurfaceRef.current) {
-          let bOpacity = 0;
-          let bTranslateY = 20;
-          if (continuousFrame >= 300 && continuousFrame <= 310) {
-            bOpacity = (continuousFrame - 300) / 10;
-            bTranslateY = 20 * (1 - bOpacity);
-          } else if (continuousFrame > 310) {
-            bOpacity = 1;
-            bTranslateY = 0;
-          }
+          let bOpacity = 0, bTranslateY = 20;
+          if (mappedFrame >= 300 && mappedFrame <= 310) { bOpacity = (mappedFrame - 300) / 10; bTranslateY = 20 * (1 - bOpacity); }
+          else if (mappedFrame > 310) { bOpacity = 1; bTranslateY = 0; }
           beneathSurfaceRef.current.style.opacity = bOpacity.toString();
           beneathSurfaceRef.current.style.transform = `translateY(${bTranslateY}px)`;
-          beneathSurfaceRef.current.style.filter = 'none';
         }
-
-        if (scrollIconRef.current) {
-          let sOpacity = 1;
-          if (continuousFrame > 15) {
-            sOpacity = Math.max(0, 1 - (continuousFrame - 15) / 10);
-          }
-          scrollIconRef.current.style.opacity = sOpacity.toString();
-        }
-
-        if (atFolicleRef.current) {
-          let fOpacity = 0;
-          let fTranslateY = 20;
-          if (continuousFrame >= 320 && continuousFrame <= 330) {
-            fOpacity = (continuousFrame - 320) / 10;
-            fTranslateY = 20 * (1 - fOpacity);
-          } else if (continuousFrame > 330) {
-            fOpacity = 1;
-            fTranslateY = 0;
-          }
-          atFolicleRef.current.style.opacity = fOpacity.toString();
-          atFolicleRef.current.style.transform = `translateY(${fTranslateY}px)`;
-          atFolicleRef.current.style.filter = 'none';
-        }
-
-        if (atCirculationRef.current) {
-          let cOpacity = 0;
-          let cTranslateY = 20;
-          if (continuousFrame >= 340 && continuousFrame <= 350) {
-            cOpacity = (continuousFrame - 340) / 10;
-            cTranslateY = 20 * (1 - cOpacity);
-          } else if (continuousFrame > 350) {
-            cOpacity = 1;
-            cTranslateY = 0;
-          }
-          atCirculationRef.current.style.opacity = cOpacity.toString();
-          atCirculationRef.current.style.transform = `translateY(${cTranslateY}px)`;
-          atCirculationRef.current.style.filter = 'none';
-        }
-
-        if (atCellularRecoveryRef.current) {
-          let rOpacity = 0;
-          let rTranslateY = 20;
-          if (continuousFrame >= 360 && continuousFrame <= 370) {
-            rOpacity = (continuousFrame - 360) / 10;
-            rTranslateY = 20 * (1 - rOpacity);
-          } else if (continuousFrame > 370) {
-            rOpacity = 1;
-            rTranslateY = 0;
-          }
-          atCellularRecoveryRef.current.style.opacity = rOpacity.toString();
-          atCellularRecoveryRef.current.style.transform = `translateY(${rTranslateY}px)`;
-          atCellularRecoveryRef.current.style.filter = 'none';
-        }
-
-        // --- PROGRESS SECTION ANIMATIONS ---
+        if (scrollIconRef.current) scrollIconRef.current.style.opacity = (mappedFrame > 15) ? Math.max(0, 1 - (mappedFrame - 15) / 10).toString() : "1";
+        if (atFolicleRef.current) { let fOpacity = 0, fTranslateY = 20; if (mappedFrame >= 320 && mappedFrame <= 330) { fOpacity = (mappedFrame - 320) / 10; fTranslateY = 20 * (1 - fOpacity); } else if (mappedFrame > 330) { fOpacity = 1; fTranslateY = 0; } atFolicleRef.current.style.opacity = fOpacity.toString(); atFolicleRef.current.style.transform = `translateY(${fTranslateY}px)`; }
+        if (atCirculationRef.current) { let cOpacity = 0, cTranslateY = 20; if (mappedFrame >= 340 && mappedFrame <= 350) { cOpacity = (mappedFrame - 340) / 10; cTranslateY = 20 * (1 - cOpacity); } else if (mappedFrame > 350) { cOpacity = 1; cTranslateY = 0; } atCirculationRef.current.style.opacity = cOpacity.toString(); atCirculationRef.current.style.transform = `translateY(${cTranslateY}px)`; }
+        if (atCellularRecoveryRef.current) { let rOpacity = 0, rTranslateY = 20; if (mappedFrame >= 360 && mappedFrame <= 370) { rOpacity = (mappedFrame - 360) / 10; rTranslateY = 20 * (1 - rOpacity); } else if (mappedFrame > 370) { rOpacity = 1; rTranslateY = 0; } atCellularRecoveryRef.current.style.opacity = rOpacity.toString(); atCellularRecoveryRef.current.style.transform = `translateY(${rTranslateY}px)`; }
         
-        // Fade out previous cards when transition starts (so they don't look weird while scrolling up)
-        if (glassCardsContainerRef.current) {
-          let gcOpacity = 1;
-          if (continuousFrame >= 450 && continuousFrame <= 480) {
-            gcOpacity = 1 - ((continuousFrame - 450) / 30);
-          } else if (continuousFrame > 480) {
-            gcOpacity = 0;
-          }
-          glassCardsContainerRef.current.style.opacity = gcOpacity.toString();
-        }
-
-        // Fade out the teal background during the physical scroll transition to reveal pure black for the golden sequence
-        if (bgTealRef.current) {
-          let bgOpacity = 1;
-          if (continuousFrame >= 450 && continuousFrame <= 500) {
-            bgOpacity = 1 - ((continuousFrame - 450) / 50);
-          } else if (continuousFrame > 500) {
-            bgOpacity = 0;
-          }
-          bgTealRef.current.style.opacity = bgOpacity.toString();
-        }
-
-        // 1. Physical Vertical Scroll Wipe (frames 450 to 500)
+        if (glassCardsContainerRef.current) glassCardsContainerRef.current.style.opacity = (mappedFrame >= 450 && mappedFrame <= 480) ? (1 - ((mappedFrame - 450) / 30)).toString() : (mappedFrame > 480 ? "0" : "1");
+        if (bgTealRef.current) bgTealRef.current.style.opacity = (mappedFrame >= 450 && mappedFrame <= 500) ? (1 - ((mappedFrame - 450) / 50)).toString() : (mappedFrame > 500 ? "0" : "1");
+        
         if (firstSectionRef.current && progressSectionRef.current) {
-          let yOffset = 0; // 0 to 100
-          if (continuousFrame >= 450 && continuousFrame <= 500) {
-            yOffset = ((continuousFrame - 450) / 50) * 100;
-          } else if (continuousFrame > 500) {
-            yOffset = 100;
-          }
-          
-          // First scene translates UP out of the viewport
+          let yOffset = (mappedFrame >= 450 && mappedFrame <= 500) ? ((mappedFrame - 450) / 50) * 100 : (mappedFrame > 500 ? 100 : 0);
           firstSectionRef.current.style.transform = `translateY(-${yOffset}vh)`;
-          
-          // Second scene translates UP into the viewport, attached to the bottom
           progressSectionRef.current.style.transform = `translateY(${100 - yOffset}vh)`;
+          progressSectionRef.current.style.opacity = (mappedFrame >= 430) ? '1' : '0';
           
-          // Reset opacity/blur that used to exist
-          progressSectionRef.current.style.opacity = '1';
-          progressSectionRef.current.style.filter = 'none';
-        }
-
-        // 1.5 Smoothly invert the navbar colors so it's readable on top of the bright golden bubbles
-        if (headerRef.current) {
-          let invertValue = 0;
-          if (continuousFrame >= 450 && continuousFrame <= 500) {
-            invertValue = (continuousFrame - 450) / 50;
-          } else if (continuousFrame > 500) {
-            invertValue = 1;
+          // Dynamically remove the massive 40px blur as it enters the viewport
+          if (mappedFrame >= 450) {
+            let blurValue = 40 - ((mappedFrame - 450) / 50) * 40;
+            if (blurValue < 0) blurValue = 0;
+            progressSectionRef.current.style.filter = `blur(${blurValue}px)`;
+          } else {
+            progressSectionRef.current.style.filter = 'blur(40px)';
           }
-          headerRef.current.style.filter = `invert(${invertValue})`;
         }
 
-        // 2. Animate Second 3D Sequence (frames 500 to 650)
-        if (continuousFrame >= 500 && continuousFrame <= 650) {
-          const pIndex = continuousFrame - 500;
-          updateProgressImage(pIndex);
-        } else if (continuousFrame > 650) {
-          updateProgressImage(149);
-        } else if (continuousFrame < 500) {
-          updateProgressImage(0);
-        }
-
-        // 3. Title Fade In
-        if (progressTitleRef.current) {
-          let ptOpacity = 0;
-          if (continuousFrame >= 500 && continuousFrame <= 520) {
-            ptOpacity = (continuousFrame - 500) / 20;
-          } else if (continuousFrame > 520) {
-            ptOpacity = 1;
-          }
-          progressTitleRef.current.style.opacity = ptOpacity.toString();
-        }
-
-        // 4. Week 1 Card
-        if (week1Ref.current) {
-          let wOpacity = 0;
-          let wTranslateY = 50;
-          if (continuousFrame >= 520 && continuousFrame <= 550) {
-            wOpacity = (continuousFrame - 520) / 30;
-            wTranslateY = 50 * (1 - wOpacity);
-          } else if (continuousFrame > 550) {
-            wOpacity = 1;
-            wTranslateY = 0;
-          }
-          week1Ref.current.style.opacity = wOpacity.toString();
-          week1Ref.current.style.transform = `translateY(${wTranslateY}px)`;
-        }
-
-        // 5. Week 3 Card
-        if (week3Ref.current) {
-          let wOpacity = 0;
-          let wTranslateY = 50;
-          if (continuousFrame >= 560 && continuousFrame <= 590) {
-            wOpacity = (continuousFrame - 560) / 30;
-            wTranslateY = 50 * (1 - wOpacity);
-          } else if (continuousFrame > 590) {
-            wOpacity = 1;
-            wTranslateY = 0;
-          }
-          week3Ref.current.style.opacity = wOpacity.toString();
-          week3Ref.current.style.transform = `translateY(${wTranslateY}px)`;
-        }
-
-        // 6. Week 6 Card
-        if (week6Ref.current) {
-          let wOpacity = 0;
-          let wTranslateY = 50;
-          if (continuousFrame >= 600 && continuousFrame <= 630) {
-            wOpacity = (continuousFrame - 600) / 30;
-            wTranslateY = 50 * (1 - wOpacity);
-          } else if (continuousFrame > 630) {
-            wOpacity = 1;
-            wTranslateY = 0;
-          }
-          week6Ref.current.style.opacity = wOpacity.toString();
-          week6Ref.current.style.transform = `translateY(${wTranslateY}px)`;
-        }
+        if (headerRef.current) headerRef.current.style.filter = `invert(${(mappedFrame >= 450 && mappedFrame <= 500) ? (mappedFrame - 450) / 50 : (mappedFrame > 500 ? 1 : 0)})`;
+        if (mappedFrame >= 500 && mappedFrame <= 650) updateProgressImage(mappedFrame - 500); else if (mappedFrame > 650) updateProgressImage(149); else if (mappedFrame < 500) updateProgressImage(0);
+        
+        if (progressTitleRef.current) progressTitleRef.current.style.opacity = (mappedFrame >= 500 && mappedFrame <= 520) ? ((mappedFrame - 500) / 20).toString() : (mappedFrame > 520 ? "1" : "0");
+        if (week1Ref.current) { let wOpacity = 0, wTranslateY = 50; if (mappedFrame >= 520 && mappedFrame <= 550) { wOpacity = (mappedFrame - 520) / 30; wTranslateY = 50 * (1 - wOpacity); } else if (mappedFrame > 550) { wOpacity = 1; wTranslateY = 0; } week1Ref.current.style.opacity = wOpacity.toString(); week1Ref.current.style.transform = `translateY(${wTranslateY}px)`; }
+        if (week3Ref.current) { let wOpacity = 0, wTranslateY = 50; if (mappedFrame >= 560 && mappedFrame <= 590) { wOpacity = (mappedFrame - 560) / 30; wTranslateY = 50 * (1 - wOpacity); } else if (mappedFrame > 590) { wOpacity = 1; wTranslateY = 0; } week3Ref.current.style.opacity = wOpacity.toString(); week3Ref.current.style.transform = `translateY(${wTranslateY}px)`; }
+        if (week6Ref.current) { let wOpacity = 0, wTranslateY = 50; if (mappedFrame >= 600 && mappedFrame <= 630) { wOpacity = (mappedFrame - 600) / 30; wTranslateY = 50 * (1 - wOpacity); } else if (mappedFrame > 630) { wOpacity = 1; wTranslateY = 0; } week6Ref.current.style.opacity = wOpacity.toString(); week6Ref.current.style.transform = `translateY(${wTranslateY}px)`; }
       }
     });
 
-    return () => {
-      st.kill();
-    };
+    return () => { st.kill(); };
   }, []);
+
+  const handlePlayClick = () => {
+    hasClickedPlayRef.current = true;
+    if (playToastRef.current) playToastRef.current.style.opacity = '0';
+    const st = ScrollTrigger.getById("mainTrigger");
+    if (st) {
+      const targetScrollY = st.start + (196 / 750) * (st.end - st.start);
+      gsap.to(window, { scrollTo: targetScrollY, duration: 2.5, ease: "power2.inOut" });
+    }
+  };
 
   return (
     <>
@@ -632,13 +406,42 @@ export default function Home() {
             <h2 className="benefits-title">
               BENEFITS TO<br/>EXPECT
             </h2>
-            <div className="benefits-actions">
+            <div className="benefits-actions" style={{ position: 'relative' }}>
               <button className="benefits-btn">FROM FLORIAN</button>
-              <button className="benefits-play-btn">
+              <button className="benefits-play-btn" onClick={handlePlayClick}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
               </button>
+              
+              <div 
+                ref={playToastRef}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  pointerEvents: 'none',
+                  opacity: 0,
+                  transform: 'translate(0px, -50%)',
+                  transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <div style={{ width: '25px', height: '1px', background: 'linear-gradient(to right, rgba(221, 132, 72, 0.6), transparent)' }}></div>
+                <span style={{
+                  fontFamily: 'Georgia, "Times New Roman", Times, serif',
+                  fontStyle: 'italic',
+                  fontSize: '13px',
+                  color: 'rgba(255,255,255,0.7)',
+                  letterSpacing: '1.5px',
+                  textShadow: '0 0 10px rgba(221, 132, 72, 0.2)'
+                }}>
+                  Click play to resume
+                </span>
+              </div>
             </div>
           </div>
         </div>
